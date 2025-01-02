@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cofre da Sorte</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+        
+
+        header {
+            background-color: #4caf50;
+            text-align: center;
+            color: white;
+            padding: 20px 0;
+            position: relative;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin: 10px 0;
+        }
+
+        header p {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .banner {
+          max-width: 100%;
+          width: 100%;
+          height: 520px;
+          margin: 0; /* Remove qualquer margem */
+          padding: 0; /* Remove espaçamento */
+          background-color: #ffffff;
+          background-image: url('/static/imagens/banner.png');
+          background-size: cover; /* Adapta a imagem sem repetir */
+          background-position: center; /* Centraliza a imagem */
+          background-repeat: no-repeat; /* Evita repetição */
+       }
+
+
+        main {
+            max-width: 100%;
+            margin: 50px auto;
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0px 4px px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .form-container {
+            text-align: center;
+        }
+
+        .numbers-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .numbers-grid button {
+            background-color: #fff;
+            color: #000;
+            border: 2px solid #ccc;
+            padding: 10px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .numbers-grid button.selected {
+            background-color: #4caf50;
+            color: white;
+            border-color: #4caf50;
+        }
+
+        .digit-display {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .digit-display span {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            line-height: 50px;
+            text-align: center;
+            font-size: 1.5rem;
+            background-color: #e9ecef;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .digit-display span.selected {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .attempts-list {
+            margin-top: 20px;
+        }
+
+        .attempts-list h2 {
+            margin-bottom: 10px;
+        }
+
+        .attempts-list ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .attempts-list li {
+            background-color: #f7f7f7;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #388e3c;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #4caf50;
+            color: white;
+        }
+
+        footer p {
+            margin: 0;
+        }
+
+        .clock {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #4caf50;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .message-banner {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        /* ======================== */
+        /* AQUI ENTRAM AS MEDIA QUERIES */
+        /* ======================== */
+
+        /* Para telas menores que 768px (tablets e smartphones) */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2rem; /* Menor título para caber na tela */
+            }
+            .banner {
+                height: 130px; /* Reduz o banner */
+                background-repeat: no-repeat;
+                background-position: center;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            .numbers-grid {
+                grid-template-columns: repeat(5, 1fr); /* 5 colunas em vez de 10 */
+            }
+            .numbers-grid button {
+                font-size: 1rem;
+                padding: 8px;
+            }
+            .digit-display span {
+                width: 40px;
+                height: 40px;
+                line-height: 40px;
+                font-size: 1.2rem;
+            }
+        }
+
+        /* Para telas menores que 480px (celulares bem pequenos) */
+        @media (max-width: 480px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+            .numbers-grid {
+                grid-template-columns: repeat(4, 1fr); /* 4 colunas para telas beeem pequenas */
+            }
+            .digit-display span {
+                width: 35px;
+                height: 35px;
+                line-height: 35px;
+                font-size: 1rem;
+            }
+        }
+    </style>
+    <script>
+        let selectedNumbers = [];
+
+        function toggleNumber(button, number) {
+            if (selectedNumbers.includes(number)) {
+                selectedNumbers = selectedNumbers.filter(n => n !== number);
+                button.classList.remove('selected');
+            } else if (selectedNumbers.length < 6) {
+                selectedNumbers.push(number);
+                button.classList.add('selected');
+            }
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const display = document.querySelectorAll('.digit-display span');
+            display.forEach((span, index) => {
+                span.textContent = selectedNumbers[index] || '';
+                if (selectedNumbers[index]) {
+                    span.classList.add('selected');
+                } else {
+                    span.classList.remove('selected');
+                }
+            });
+
+            const hiddenInput = document.querySelector("input[name='numbers']");
+            hiddenInput.value = selectedNumbers.join(',');
+        }
+
+        function updateClock(resetTime) {
+            const now = new Date();
+            const diff = new Date(resetTime) - now;
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            document.getElementById("clock").innerText = 
+                `${hours}h ${minutes}m ${seconds}s`;
+
+            if (diff > 0) {
+                setTimeout(() => updateClock(resetTime), 1000);
+            }
+        }
+    </script>
+</head>
+<body onload="updateClock('{{ safe.reset_time }}')">
+    <header>
+        <div class="banner"></div>
+        <h1>COFRE DA SORTE</h1>
+        <p>Escolha 6 números únicos de 1 a 60</p>
+    </header>
+
+    <main>
+        {% if message %}
+        <div class="message-banner">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <form method="POST" class="form-container">
+            <label for="username">Seu @ do Instagram:</label>
+            <input type="text" id="username" name="username" required placeholder="@seuusuario">
+            <div class="digit-display">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <div class="numbers-grid">
+                {% for i in range(1, 61) %}
+                <button type="button" onclick="toggleNumber(this, '{{ i }}')">{{ i }}</button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="numbers" value="">
+            <button type="submit">Tentar Abrir o Cofre</button>
+        </form>
+
+        <div class="clock">
+            Tempo para o reset: <span id="clock"></span>
+        </div>
+
+        <div class="attempts-list">
+            <h2>Tentativas Recentes</h2>
+            <ul>
+                {% for attempt in attempts %}
+                <li>
+                    {{ attempt.timestamp.strftime('%d/%m/%Y %H:%M:%S') }} - 
+                    {{ attempt.username }} tentou {{ attempt.attempt }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </main>
+
+    <footer>
+        <p>© 2024 Cofre da Sorte - Todos os direitos reservados</p>
+    </footer>
+</body>
+</html>

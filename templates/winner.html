@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Você Ganhou!</title>
+</head>
+<body>
+    <h1>Parabéns, {{ username }}!</h1>
+    <p>Você acertou a combinação do cofre!</p>
+    <p>Prêmio: {{ safe.prize }}</p>
+    <a href="{{ url_for('index') }}">Voltar</a>
+</body>
+</html>
