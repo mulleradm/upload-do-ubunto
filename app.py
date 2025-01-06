@@ -1,6 +1,7 @@
 import random
 import csv
 import os
+import logging
 from flask import Flask, render_template, request, redirect, url_for, flash, get_flashed_messages, send_file, abort
 from flask_migrate import Migrate
 from markupsafe import Markup
@@ -16,10 +17,11 @@ from googleapiclient.discovery import build
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
+# Configuração básica do Flask
 app = Flask(__name__)
 
 # Configuração do Flask
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cofre.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cofre.db'  # Caminho para o banco de dados
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')  # Usando a variável do .env
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -27,32 +29,48 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['RECAPTCHA_PUBLIC_KEY'] = os.getenv('RECAPTCHA_PUBLIC_KEY')
 app.config['RECAPTCHA_PRIVATE_KEY'] = os.getenv('RECAPTCHA_PRIVATE_KEY')
 
+# Iniciar banco de dados e migrações
 db.init_app(app)
 migrate = Migrate(app, db)
 
 # Variável global para rastrear se o cofre foi configurado
 safe_initialized = False
 
+# Função para gerar a combinação de números
 def generate_combination():
     return '-'.join(str(random.randint(1, 60)) for _ in range(6))
 
+# Configuração de logs para depuração
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Função que configura o cofre antes da primeira requisição
 @app.before_request
 def setup_safe():
     """Configura o cofre antes da primeira requisição."""
     global safe_initialized
     if not safe_initialized:
-        safe = Safe.query.first()
-        if not safe:
-            safe = Safe(
-                combination=generate_combination(),
-                prize="Prêmio inicial",
-                donor="Doador inicial",
-                reset_time=(datetime.now(timezone.utc) + timedelta(days=30))  # Certifique-se de usar timezone-aware datetime
-            )
-            db.session.add(safe)
-            db.session.commit()
+        try:
+            # Tenta obter o primeiro registro do cofre
+            safe = Safe.query.first()
+
+            # Se não existir um cofre, cria um novo
+            if not safe:
+                safe = Safe(
+                    combination=generate_combination(),
+                    prize="Prêmio inicial",
+                    donor="Doador inicial",
+                    reset_time=datetime.now(timezone.utc) + timedelta(days=30)  # Certifique-se de usar datetime com fuso horário
+                )
+                db.session.add(safe)
+                db.session.commit()
+                logging.info("Cofre configurado com sucesso!")
+        except Exception as e:
+            # Caso ocorra algum erro, loga a mensagem de erro
+            logging.error(f"Erro ao configurar o cofre: {e}")
+
         safe_initialized = True
 
+# Função que verifica o token do reCAPTCHA usando a API do Google
 def verify_recaptcha(token: str, recaptcha_action: str) -> bool:
     """Verifica o token do reCAPTCHA usando a API do Google."""
     
@@ -73,23 +91,26 @@ def verify_recaptcha(token: str, recaptcha_action: str) -> bool:
     response = requests.post(url, json=recaptcha_data)
 
     if response.status_code != 200:
+        logging.error("Erro ao validar o reCAPTCHA")
         return False
     
     result = response.json()
 
     # Verifique a pontuação e se a ação corresponde
     if result.get("tokenProperties", {}).get("valid") and result["tokenProperties"].get("action") == recaptcha_action:
-        print(f"A pontuação de risco para este token é: {result['riskAnalysis']['score']}")
+        logging.info(f"A pontuação de risco para este token é: {result['riskAnalysis']['score']}")
         return True
     else:
-        print("Falha na validação do reCAPTCHA.")
+        logging.error("Falha na validação do reCAPTCHA.")
         return False
 
+# Definição do formulário para tentar abrir o cofre
 class AttemptForm(FlaskForm):
     username = StringField('Seu @ do Instagram', validators=[InputRequired(), Length(min=3)])
     recaptcha = StringField('reCAPTCHA', validators=[InputRequired()])
     submit = SubmitField('Tentar Abrir o Cofre')
 
+# Rota principal
 @app.route("/", methods=["GET", "POST"])
 def index():
     safe = Safe.query.first()
@@ -160,6 +181,7 @@ def index():
 
     return render_template("index.html", safe=safe, attempts=attempts, form=form)
 
+# Função para exportar auditoria
 @app.route("/exportar_auditoria", methods=["GET"])
 def exportar_auditoria():
     # Verifica se a aplicação está rodando em ambiente de desenvolvimento
@@ -182,15 +204,39 @@ def exportar_auditoria():
     # Enviar o arquivo CSV gerado para o usuário
     return send_file(filename, as_attachment=True)
 
+# Função para resetar o cofre
 @app.route("/reset")
 def reset_safe():
-    safe = Safe.query.first()
-    safe.combination = generate_combination()  # Gera uma nova combinação
-    safe.reset_time = datetime.now(timezone.utc) + timedelta(days=30)  # Novo reset de 30 dias
-    safe.winner = None  # Limpa o vencedor para permitir novas tentativas
-    db.session.commit()
-    flash("Cofre resetado com sucesso!")
+    try:
+        # Recupera o primeiro cofre, se existir
+        safe = Safe.query.first()
+        
+        if safe:
+            # Gera uma nova combinação
+            safe.combination = generate_combination()
+            
+            # Atualiza o tempo de reset
+            safe.reset_time = datetime.now(timezone.utc) + timedelta(days=30)
+            
+            # Limpa o vencedor para permitir novas tentativas
+            safe.winner = None
+            
+            # Salva as alterações no banco de dados
+            db.session.commit()
+
+            # Feedback de sucesso para o usuário
+            flash("Cofre resetado com sucesso!")
+        else:
+            flash("Cofre não encontrado.", "error")  # Caso não exista um cofre
+
+    except Exception as e:
+        # Registra erro e avisa o usuário
+        db.session.rollback()  # Reverte qualquer alteração no banco em caso de erro
+        flash(f"Erro ao resetar o cofre: {str(e)}", "error")
+    
+    # Redireciona para a página principal após o reset
     return redirect(url_for("index"))
 
+# Rodar o aplicativo Flask
 if __name__ == "__main__":
     app.run(debug=True)
