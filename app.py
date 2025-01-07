@@ -1,242 +1,398 @@
-import random
-import csv
+# app.py
 import os
+import re
+import csv
+import io
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash, get_flashed_messages, send_file, abort
-from flask_migrate import Migrate
-from markupsafe import Markup
-from flask_wtf import FlaskForm
-from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
-from db import db, Attempt, Safe
-from wtforms import StringField, SubmitField
-from wtforms.validators import InputRequired, Length
+import random
+from markupsafe import escape, Markup
 import requests
-from googleapiclient.discovery import build
+from datetime import datetime, timedelta, timezone
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, abort
+from flask_migrate import Migrate
+from dotenv import load_dotenv
+from werkzeug.exceptions import HTTPException
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from db import db, Attempt, Safe  # Importa modelos do db.py
+from flask_wtf import FlaskForm
+from wtforms import StringField, HiddenField, SubmitField
+from wtforms.validators import InputRequired, Length
 
-# Carregar variáveis de ambiente do arquivo .env
+# =============================================================================
+# Carregar variáveis de ambiente (chaves, tokens, etc.)
+# =============================================================================
 load_dotenv()
 
+# =============================================================================
 # Configuração básica do Flask
+# =============================================================================
 app = Flask(__name__)
 
-# Configuração do Flask
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cofre.db'  # Caminho para o banco de dados
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')  # Usando a variável do .env
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite:///cofre.db")
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "chave-secreta-padrao")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Configuração do Google reCAPTCHA
-app.config['RECAPTCHA_PUBLIC_KEY'] = os.getenv('RECAPTCHA_PUBLIC_KEY')
-app.config['RECAPTCHA_PRIVATE_KEY'] = os.getenv('RECAPTCHA_PRIVATE_KEY')
+# =============================================================================
+# Configuração do Google reCAPTCHA v3
+# =============================================================================
+app.config["RECAPTCHA_PUBLIC_KEY"] = os.getenv("RECAPTCHA_PUBLIC_KEY")
+app.config["RECAPTCHA_PRIVATE_KEY"] = os.getenv("RECAPTCHA_PRIVATE_KEY")
+RECAPTCHA_THRESHOLD = 0.5  # Ajuste conforme necessário
 
-# Iniciar banco de dados e migrações
+# =============================================================================
+# Inicializar banco de dados e migrações
+# =============================================================================
 db.init_app(app)
 migrate = Migrate(app, db)
 
+# =============================================================================
+# Configurar Limiter para proteção básica contra força bruta / abusos
+# =============================================================================
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],  # Ajuste conforme necessidade
+)
+
+# =============================================================================
 # Variável global para rastrear se o cofre foi configurado
+# =============================================================================
 safe_initialized = False
 
-# Função para gerar a combinação de números
-def generate_combination():
-    return '-'.join(str(random.randint(1, 60)) for _ in range(6))
+# =============================================================================
+# Funções Utilitárias
+# =============================================================================
+def generate_combination() -> str:
+    """
+    Gera uma combinação de 6 números aleatórios entre 1 e 60,
+    separados por vírgulas.
+    """
+    nums = random.sample(range(1, 61), 6)
+    return ",".join(map(str, nums))
 
-# Configuração de logs para depuração
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Função que configura o cofre antes da primeira requisição
-@app.before_request
 def setup_safe():
-    """Configura o cofre antes da primeira requisição."""
+    """
+    Configura o cofre com uma combinação inicial e prêmio,
+    caso ainda não tenha sido configurado.
+    Chamada apenas uma vez na inicialização.
+    """
     global safe_initialized
-    if not safe_initialized:
-        try:
-            # Tenta obter o primeiro registro do cofre
-            safe = Safe.query.first()
+    if safe_initialized:
+        return
 
-            # Se não existir um cofre, cria um novo
-            if not safe:
-                safe = Safe(
-                    combination=generate_combination(),
-                    prize="Prêmio inicial",
-                    donor="Doador inicial",
-                    reset_time=datetime.now(timezone.utc) + timedelta(days=30)  # Certifique-se de usar datetime com fuso horário
-                )
-                db.session.add(safe)
-                db.session.commit()
-                logging.info("Cofre configurado com sucesso!")
-        except Exception as e:
-            # Caso ocorra algum erro, loga a mensagem de erro
-            logging.error(f"Erro ao configurar o cofre: {e}")
-
+    try:
+        if not Safe.query.first():
+            combination = generate_combination()
+            prize = "Um super prêmio incrível"
+            donor = "Um doador generoso"
+            reset_time = datetime.now(timezone.utc) + timedelta(days=30)
+            safe = Safe(
+                combination=combination,
+                prize=prize,
+                donor=donor,
+                reset_time=reset_time,
+            )
+            db.session.add(safe)
+            db.session.commit()
+            app.logger.info("Cofre configurado com sucesso!")
+    except Exception as e:
+        app.logger.error(f"Erro ao configurar o cofre: {e}")
+    finally:
         safe_initialized = True
 
-# Função que verifica o token do reCAPTCHA usando a API do Google
-def verify_recaptcha(token: str, recaptcha_action: str) -> bool:
-    """Verifica o token do reCAPTCHA usando a API do Google."""
-    
-    # Configuração do cliente Google API
-    service = build('recaptchaenterprise', 'v1', developerKey=os.getenv('RECAPTCHA_PRIVATE_KEY'))
 
-    # Corpo da solicitação
-    recaptcha_data = {
-        "event": {
-            "token": token,
-            "expectedAction": recaptcha_action,
-            "siteKey": os.getenv("RECAPTCHA_PUBLIC_KEY"),
-        }
-    }
-
-    # Enviar solicitação para a API do Google
-    url = f"https://recaptchaenterprise.googleapis.com/v1/projects/{os.getenv('GOOGLE_CLOUD_PROJECT_ID')}/assessments?key={os.getenv('RECAPTCHA_PRIVATE_KEY')}"
-    response = requests.post(url, json=recaptcha_data)
-
-    if response.status_code != 200:
-        logging.error("Erro ao validar o reCAPTCHA")
-        return False
-    
-    result = response.json()
-
-    # Verifique a pontuação e se a ação corresponde
-    if result.get("tokenProperties", {}).get("valid") and result["tokenProperties"].get("action") == recaptcha_action:
-        logging.info(f"A pontuação de risco para este token é: {result['riskAnalysis']['score']}")
+def verify_recaptcha(token: str, action: str) -> bool:
+    """
+    Verifica o token do reCAPTCHA v3 usando a API do Google.
+    :param token: Token retornado pelo reCAPTCHA no frontend
+    :param action: Ação definida (ex.: 'login')
+    :return: True se a verificação foi bem-sucedida e acima do threshold
+    """
+    secret_key = app.config["RECAPTCHA_PRIVATE_KEY"]
+    if not secret_key:
+        # Se não existir chave, desativamos a verificação
+        app.logger.warning("Chave secreta do reCAPTCHA não configurada; verificação ignorada.")
         return True
-    else:
-        logging.error("Falha na validação do reCAPTCHA.")
+
+    payload = {
+        "secret": secret_key,
+        "response": token,
+        "remoteip": request.remote_addr,
+    }
+    try:
+        response = requests.post("https://www.google.com/recaptcha/api/siteverify", data=payload)
+        result = response.json()
+        app.logger.info(f"Resposta do reCAPTCHA: {result}")
+        if (
+            result.get("success")
+            and result.get("action") == action
+            and result.get("score", 0) >= RECAPTCHA_THRESHOLD
+        ):
+            return True
+        else:
+            app.logger.warning(f"Falha na verificação do reCAPTCHA v3. Resultado: {result}")
+            return False
+    except Exception as e:
+        app.logger.error(f"Erro ao verificar reCAPTCHA: {e}")
         return False
 
-# Definição do formulário para tentar abrir o cofre
+
+def validate_username(username: str) -> bool:
+    """
+    Valida o formato do nome de usuário usando regex:
+    - Deve começar com '@'
+    - Ter ao menos 3 caracteres (contando o '@')
+    """
+    pattern = r"^@[A-Za-z0-9_]{2,}$"
+    return bool(re.match(pattern, username))
+
+
+def validate_combination(combination: str) -> bool:
+    """
+    Valida a combinação usando regex:
+    - Deve conter 6 números entre 1 e 60, separados por vírgulas.
+    Ex.: '1,2,30,45,59,60'
+    """
+    pattern = r"^([1-9]|[1-5]\d|60)(,\s?([1-9]|[1-5]\d|60)){5}$"
+    return bool(re.match(pattern, combination.replace(" ", "")))
+
+
+# =============================================================================
+# Decoradores de segurança e autenticação
+# =============================================================================
+def recaptcha_required(action_name="login"):
+    """
+    Decorador que força a validação do reCAPTCHA v3 antes de executar a rota.
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            token = request.form.get("g-recaptcha-response", "")
+            if not verify_recaptcha(token, action_name):
+                flash("Falha na validação do reCAPTCHA. Tente novamente.", "error")
+                return redirect(url_for("index"))
+            return func(*args, **kwargs)
+        wrapper.__name__ = func.__name__
+        return wrapper
+    return decorator
+
+
+def admin_required(func):
+    """
+    Decorador simples para rotas que exigem 'autenticação' de administrador.
+    Aqui, usamos um token fixo (RESET_TOKEN) como exemplo.
+    Idealmente, utilize flask-login ou OAuth para algo mais robusto.
+    """
+    def wrapper(*args, **kwargs):
+        auth_token = request.args.get("auth")
+        if auth_token != os.getenv("RESET_TOKEN"):
+            abort(403)  # Forbidden
+        return func(*args, **kwargs)
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+
+# =============================================================================
+# Formulário de Tentativa
+# =============================================================================
 class AttemptForm(FlaskForm):
-    username = StringField('Seu @ do Instagram', validators=[InputRequired(), Length(min=3)])
-    recaptcha = StringField('reCAPTCHA', validators=[InputRequired()])
-    submit = SubmitField('Tentar Abrir o Cofre')
+    username = StringField(
+        "Seu @ do Instagram",
+        validators=[
+            InputRequired(message="O nome de usuário é obrigatório."),
+            Length(min=3, max=100, message="O nome de usuário deve ter entre 3 e 100 caracteres.")
+        ]
+    )
+    numbers = HiddenField(
+        "Numbers",
+        validators=[
+            InputRequired(message="A combinação de números é obrigatória.")
+        ]
+    )
+    submit = SubmitField("Tentar Abrir o Cofre")
 
-# Rota principal
+
+# =============================================================================
+# Rotas
+# =============================================================================
 @app.route("/", methods=["GET", "POST"])
+@limiter.limit("10/minute")  # Exemplo: Máximo de 10 requisições por minuto
 def index():
+    """
+    Página principal com o formulário para tentar abrir o cofre.
+    """
     safe = Safe.query.first()
-    attempts = Attempt.query.all()
+    if not safe:
+        flash("O cofre ainda não foi configurado.", "error")
+        return render_template("index.html", safe=None, attempts=[], form=None)
 
-    # Verifica se o cofre já foi aberto (se há um vencedor)
-    if safe.winner:
-        flash("O cofre já foi aberto! Aguardando o próximo reset.", "info")
-        return render_template("index.html", safe=safe, attempts=attempts)
+    attempts = Attempt.query.order_by(Attempt.timestamp.desc()).limit(10).all()
 
-    form = AttemptForm()
+    form = AttemptForm()  # Instancia o formulário
 
-    if request.method == "POST" and form.validate_on_submit():
+    if form.validate_on_submit():
         username = form.username.data.strip()
-        numbers = request.form.get("numbers", "").strip()
-        recaptcha_response = request.form.get('g-recaptcha-response')
+        combination = form.numbers.data.strip()
+        recaptcha_token = request.form.get("g-recaptcha-response", "")
 
-        # Substitua pelas suas variáveis
-        recaptcha_action = "LOGIN"  # Ação definida ao configurar o reCAPTCHA
+        # Verifica reCAPTCHA v3
+        if not verify_recaptcha(recaptcha_token, "login"):
+            flash("Verificação reCAPTCHA falhou. Tente novamente.", "error")
+            return redirect(url_for("index"))
 
-        # Verifica o reCAPTCHA usando a função verify_recaptcha
-        if not verify_recaptcha(recaptcha_response, recaptcha_action):
-            flash('Falha na validação do reCAPTCHA. Tente novamente.', 'error')
-            return redirect(url_for('index'))
+        # Valida o username com regex
+        if not validate_username(username):
+            flash("Nome de usuário inválido! Exemplo válido: @usuario123", "error")
+            return redirect(url_for("index"))
 
-        # Verifica se os campos foram preenchidos corretamente
-        if not username:
-            flash("Por favor, preencha o seu @ do Instagram.", "error")
-        elif not numbers:
-            flash("Por favor, selecione os números antes de tentar abrir o cofre.", "error")
-        else:
-            # 1) Checa se o nome de usuário começa com '@'
-            if not username.startswith("@"):
-                flash("O nome de usuário deve começar com '@'.", "error")
-            else:
-                # 2) Checa se há 6 números separados por vírgula
-                parts = numbers.split(",")
-                if len(parts) != 6:
-                    flash("Por favor, selecione exatamente 6 números.", "error")
-                else:
-                    # -- NOVA LÓGICA: permitir 5 tentativas a cada 2 horas --
-                    time_2_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
-                    attempts_count = Attempt.query.filter(
-                        Attempt.username == username,
-                        Attempt.timestamp >= time_2_hours_ago
-                    ).count()
+        # Valida a combinação
+        if not validate_combination(combination):
+            flash("Combinação inválida! Ex.: '1,2,30,45,59,60'", "error")
+            return redirect(url_for("index"))
 
-                    # Se o usuário atingiu o limite de tentativas
-                    if attempts_count >= 5:
-                        flash("Você atingiu o limite de 5 tentativas a cada 2 horas. Tente novamente mais tarde.", "error")
-                    else:
-                        # Registrar a nova tentativa
-                        new_attempt = Attempt(username=username, attempt=numbers)
-                        db.session.add(new_attempt)
+        # Verifica tentativas do mesmo usuário (simples)
+        time_2_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+        attempts_count = Attempt.query.filter(
+            Attempt.username == username,
+            Attempt.timestamp >= time_2_hours_ago
+        ).count()
+        if attempts_count >= 5:
+            flash("Você atingiu o limite de 5 tentativas a cada 2 horas. Tente novamente mais tarde.", "error")
+            return redirect(url_for("index"))
 
-                        if numbers == safe.combination:
-                            # Marca o vencedor no banco de dados
-                            safe.winner = username
-                            db.session.commit()
-                            flash(f"Parabéns {username}, você acertou o cofre!", "success")
-                        else:
-                            flash("Você não acertou a senha do cofre. Tente novamente.", "error")
+        # Registrar a tentativa
+        new_attempt = Attempt(username=escape(username), attempt=escape(combination))
+        db.session.add(new_attempt)
+        db.session.commit()
 
-                        db.session.commit()
-
-        # Após o POST, redireciona para a página principal (GET)
-        return redirect(url_for('index'))  # Redireciona para a página inicial
-
-    return render_template("index.html", safe=safe, attempts=attempts, form=form)
-
-# Função para exportar auditoria
-@app.route("/exportar_auditoria", methods=["GET"])
-def exportar_auditoria():
-    # Verifica se a aplicação está rodando em ambiente de desenvolvimento
-    if os.environ.get("FLASK_ENV") != "development":
-        abort(403)  # Se não estiver em desenvolvimento, retorna erro 403 (proibido)
-
-    # Consultar todas as tentativas do banco de dados
-    attempts = Attempt.query.all()
-
-    # Criar o arquivo CSV
-    filename = "tentativas.csv"
-    with open(filename, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Data/Hora", "Usuário", "Tentativa"])  # Cabeçalho do CSV
-
-        # Adicionar as tentativas ao CSV
-        for attempt in attempts:
-            writer.writerow([attempt.timestamp.strftime('%d/%m/%Y %H:%M:%S'), attempt.username, attempt.attempt])
-
-    # Enviar o arquivo CSV gerado para o usuário
-    return send_file(filename, as_attachment=True)
-
-# Função para resetar o cofre
-@app.route("/reset")
-def reset_safe():
-    try:
-        # Recupera o primeiro cofre, se existir
-        safe = Safe.query.first()
-        
-        if safe:
-            # Gera uma nova combinação
-            safe.combination = generate_combination()
-            
-            # Atualiza o tempo de reset
-            safe.reset_time = datetime.now(timezone.utc) + timedelta(days=30)
-            
-            # Limpa o vencedor para permitir novas tentativas
-            safe.winner = None
-            
-            # Salva as alterações no banco de dados
+        # Compara a combinação com a do cofre
+        if combination == safe.combination:
+            safe.winner = username
             db.session.commit()
-
-            # Feedback de sucesso para o usuário
-            flash("Cofre resetado com sucesso!")
+            flash("Parabéns! Você abriu o cofre!", "success")
+            return redirect(url_for("winner"))
         else:
-            flash("Cofre não encontrado.", "error")  # Caso não exista um cofre
+            flash("Combinação incorreta. Tente novamente.", "error")
 
+    # Cálculo de tempo restante para reset (opcional)
+    days = hours = minutes = 0  # Inicialização das variáveis
+    if safe and safe.reset_time:
+        delta = safe.reset_time.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
+        if delta.total_seconds() > 0:
+            days = delta.days
+            hours = (delta.seconds // 3600) % 24
+            minutes = (delta.seconds // 60) % 60
+
+    return render_template(
+        "index.html",
+        form=form,  # Passa o formulário para o template
+        safe=safe,
+        attempts=attempts,
+        days=days,
+        hours=hours,
+        minutes=minutes,
+        recaptcha_site_key=app.config.get("RECAPTCHA_PUBLIC_KEY"),
+    )
+
+
+@app.route("/winner", methods=["GET"])
+def winner():
+    """
+    Página exibida ao vencedor do cofre.
+    """
+    safe = Safe.query.first()
+    if not safe or not safe.winner:
+        abort(404, description="Nenhum vencedor encontrado.")
+    return render_template("winner.html", username=safe.winner, safe=safe)
+
+
+@app.route("/reset", methods=["POST"])
+def reset_safe():
+    """
+    Reseta o cofre com uma nova combinação e prêmio.
+    Exemplo de rota protegida com token via POST.
+    """
+    token = request.form.get("token")
+    if token != os.getenv("RESET_TOKEN"):
+        abort(403, description="Token inválido para resetar o cofre.")
+
+    try:
+        safe = Safe.query.first()
+        if not safe:
+            flash("Cofre não encontrado.", "error")
+            return redirect(url_for("index"))
+
+        new_combination = generate_combination()
+        new_prize = request.form.get("prize", "Um super prêmio incrível")
+        new_donor = request.form.get("donor", "Um doador generoso")
+
+        safe.reset(new_combination=new_combination, new_prize=new_prize, new_donor=new_donor)
+
+        flash("Cofre resetado com sucesso!", "success")
+        app.logger.info(f"Cofre resetado. Nova combinação: {new_combination}")
     except Exception as e:
-        # Registra erro e avisa o usuário
-        db.session.rollback()  # Reverte qualquer alteração no banco em caso de erro
+        db.session.rollback()
+        app.logger.error(f"Erro ao resetar o cofre: {str(e)}")
         flash(f"Erro ao resetar o cofre: {str(e)}", "error")
-    
-    # Redireciona para a página principal após o reset
+
     return redirect(url_for("index"))
 
-# Rodar o aplicativo Flask
+
+@app.route("/exportar_auditoria", methods=["GET"])
+@admin_required
+def exportar_auditoria():
+    """
+    Função para exportar a auditoria em CSV.
+    Agora protegida com 'admin_required'.
+    Ajuste para um sistema de login real em produção.
+    """
+    # Verifica se a aplicação está rodando em ambiente de desenvolvimento
+    if os.environ.get("FLASK_ENV") != "development":
+        abort(403, description="Rota somente permitida em desenvolvimento.")
+
+    attempts = Attempt.query.all()
+
+    si = io.StringIO()
+    writer = csv.writer(si)
+    writer.writerow(["Data/Hora", "Usuário", "Tentativa"])
+    for attempt in attempts:
+        writer.writerow([
+            attempt.timestamp.strftime("%d/%m/%Y %H:%M:%S"),
+            attempt.username,
+            attempt.attempt
+        ])
+
+    output = io.BytesIO()
+    output.write(si.getvalue().encode("utf-8"))
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name="tentativas.csv",
+    )
+
+
+@app.errorhandler(HTTPException)
+def handle_exception(e):
+    """
+    Lidar com exceções HTTP e exibir mensagens amigáveis.
+    """
+    flash(Markup(f"Ocorreu um erro: {e.name} - {e.description}"), "error")
+    return redirect(url_for("index"))
+
+
+def run_app():
+    """
+    Inicializa a aplicação, garante setup_safe() apenas uma vez e inicia o servidor.
+    """
+    with app.app_context():
+        db.create_all()
+        setup_safe()
+    app.run(debug=True, host="0.0.0.0", port=5001)
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    run_app()
