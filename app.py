@@ -4,10 +4,21 @@ import re
 import csv
 import io
 import logging
+
 from markupsafe import escape, Markup
 import requests
 from datetime import datetime, timedelta, timezone
-from flask import Flask,render_template,request,redirect,url_for,flash,send_file,abort
+
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    send_file,
+    abort
+)
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
