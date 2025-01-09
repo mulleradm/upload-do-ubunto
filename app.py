@@ -7,7 +7,7 @@ import logging
 from markupsafe import escape, Markup
 import requests
 from datetime import datetime, timedelta, timezone
-from flask import Flask,render_template,request,redirect,url_for,flash,send_file,abort
+from flask import Flask,render_template,request,redirect,url_for,flash,send_file,abort,send_from_directory, current_app
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
@@ -63,6 +63,39 @@ limiter = Limiter(
 # Variável global para rastrear se o cofre foi configurado
 # =============================================================================
 safe_initialized = False
+
+
+IMAGE_FOLDER = os.path.join(app.root_path, 'static', 'imagens')
+
+# Rota para servir as imagens da pasta static/imagens/
+@app.route('/static/imagens/<filename>')
+def serve_file(filename):
+    # Caminho absoluto para a pasta onde as imagens estão armazenadas
+    images_folder = os.path.join(current_app.root_path, 'static', 'imagens')
+    return send_from_directory(images_folder, filename)
+
+
+@app.after_request
+def add_security_headers(response):
+    """
+    Exemplos de cabeçalhos que ajudam a aumentar a segurança.
+    Ajuste conforme necessidade.
+    """
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    
+    # Atualização da Content-Security-Policy para permitir imagens do diretório correto
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "  # Permite o carregamento de CSS do mesmo domínio e inline
+        "script-src 'self'; "  # Permite o carregamento de scripts do mesmo domínio
+        "img-src 'self' data: /static/; "  # Permite imagens do mesmo domínio e imagens dentro do diretório /static/
+        "font-src 'self'; "  # Permite fontes do mesmo domínio
+        "frame-ancestors 'self'; "  # Restringe o carregamento em iframes apenas do mesmo domínio
+        "object-src 'none';"  # Impede o uso de objetos como Flash, etc.
+    )
+
+    return response
 
 
 # =============================================================================
