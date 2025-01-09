@@ -1,4 +1,3 @@
-# app.py
 import os
 import re
 import csv
@@ -13,58 +12,42 @@ from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from db import db, Attempt, Safe, generate_combination
 from flask_wtf import FlaskForm
 from wtforms import StringField, HiddenField, SubmitField
 from wtforms.validators import InputRequired, Length
+from db import db, Attempt, Safe, generate_combination
 
-# =============================================================================
-# Carregar variáveis de ambiente (.env)
-# =============================================================================
 load_dotenv()
 
-# =============================================================================
-# Configuração básica do Flask
-# =============================================================================
-app = Flask(__name__)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-    "SQLALCHEMY_DATABASE_URI", 
-    "sqlite:///cofre.db"
-)
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite:///cofre.db")
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "chave-secreta-padrao")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# =============================================================================
-# Configuração do Google reCAPTCHA v3
-# =============================================================================
+
+app.config["SESSION_COOKIE_SECURE"] = True       # Transmite cookies somente via HTTPS
+app.config["SESSION_COOKIE_HTTPONLY"] = True     # Impede acesso a cookies via JavaScript
+app.config["SESSION_COOKIE_SAMESITE"] = "Strict" # Restringe envio do cookie a requests first-party
+
+
 app.config["RECAPTCHA_PUBLIC_KEY"] = os.getenv("RECAPTCHA_PUBLIC_KEY")
 app.config["RECAPTCHA_PRIVATE_KEY"] = os.getenv("RECAPTCHA_PRIVATE_KEY")
 RECAPTCHA_THRESHOLD = 0.5  # Ajuste conforme necessário
 
-# =============================================================================
-# Inicializar banco de dados e migrações
-# =============================================================================
+
 db.init_app(app)
 migrate = Migrate(app, db)
 
-# =============================================================================
-# Configurar Limiter
-# =============================================================================
 limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["200 per day", "50 per hour"]
 )
 
-# =============================================================================
-# Variável global para rastrear se o cofre foi configurado
-# =============================================================================
 safe_initialized = False
 
-# =============================================================================
-# setup_safe() - Configura o cofre uma única vez
-# =============================================================================
+
 def setup_safe():
     """
     Configura o cofre com uma combinação inicial e prêmio,
@@ -95,9 +78,6 @@ def setup_safe():
     finally:
         safe_initialized = True
 
-# =============================================================================
-# Função que verifica o reCAPTCHA
-# =============================================================================
 def verify_recaptcha(token: str, action: str) -> bool:
     """
     Verifica o token do reCAPTCHA v3 usando a API do Google.
@@ -108,7 +88,7 @@ def verify_recaptcha(token: str, action: str) -> bool:
     secret_key = app.config["RECAPTCHA_PRIVATE_KEY"]
     if not secret_key:
         app.logger.warning("Chave secreta do reCAPTCHA não configurada; verificação ignorada.")
-        return True
+        return True  # ignora verificação se chave não estiver definida
 
     payload = {
         "secret": secret_key,
@@ -116,10 +96,7 @@ def verify_recaptcha(token: str, action: str) -> bool:
         "remoteip": request.remote_addr,
     }
     try:
-        response = requests.post(
-            "https://www.google.com/recaptcha/api/siteverify", 
-            data=payload
-        )
+        response = requests.post("https://www.google.com/recaptcha/api/siteverify", data=payload)
         result = response.json()
         app.logger.info(f"Resposta do reCAPTCHA: {result}")
         if (
@@ -135,9 +112,7 @@ def verify_recaptcha(token: str, action: str) -> bool:
         app.logger.error(f"Erro ao verificar reCAPTCHA: {e}")
         return False
 
-# =============================================================================
-# Validações
-# =============================================================================
+# ========== VALIDAÇÕES EXTRAS ==========
 def validate_username(username: str) -> bool:
     """
     Valida o formato do nome de usuário usando regex:
@@ -151,15 +126,12 @@ def validate_combination(combination: str) -> bool:
     """
     Valida a combinação usando regex:
     - Deve conter 6 números entre 1 e 60, separados por vírgulas.
-    Ex.: '1,2,30,45,59,60'
+      Ex.: '1,2,30,45,59,60'
     """
     pattern = r"^([1-9]|[1-5]\d|60)(,\s?([1-9]|[1-5]\d|60)){5}$"
     return bool(re.match(pattern, combination.replace(" ", "")))
 
 
-# =============================================================================
-# Decoradores de segurança
-# =============================================================================
 def admin_required(func):
     """
     Decorador simples para rotas que exigem 'autenticação' de administrador.
@@ -174,9 +146,6 @@ def admin_required(func):
     wrapper.__name__ = func.__name__
     return wrapper
 
-# =============================================================================
-# Formulário de Tentativa
-# =============================================================================
 class AttemptForm(FlaskForm):
     username = StringField(
         "Seu @ do Instagram",
@@ -187,16 +156,29 @@ class AttemptForm(FlaskForm):
     )
     numbers = HiddenField(
         "Numbers",
-        validators=[
-            InputRequired(message="A combinação de números é obrigatória.")
-        ]
+        validators=[InputRequired(message="A combinação de números é obrigatória.")]
     )
     submit = SubmitField("Tentar Abrir o Cofre")
 
+@app.after_request
+def add_security_headers(response):
+    """
+    Exemplos de cabeçalhos que ajudam a aumentar a segurança.
+    Ajuste conforme necessidade.
+    """
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Exemplo de Content-Security-Policy mínima (ajuste script-src, style-src, etc.)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; frame-ancestors 'self'; object-src 'none';"
+    )
+    # Se quiser impedir cache globalmente:
+    # response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    # response.headers["Pragma"] = "no-cache"
+    # response.headers["Expires"] = "0"
+    return response
 
-# =============================================================================
-# Rota Principal: index
-# =============================================================================
+
 @app.route("/", methods=["GET", "POST"])
 @limiter.limit("10/minute")
 def index():
@@ -216,7 +198,7 @@ def index():
         combination = form.numbers.data.strip()
         recaptcha_token = request.form.get("g-recaptcha-response", "")
 
-        # Verifica reCAPTCHA v3
+        # Verifica reCAPTCHA
         if not verify_recaptcha(recaptcha_token, "login"):
             flash("Verificação reCAPTCHA falhou. Tente novamente.", "error")
             return redirect(url_for("index"))
@@ -230,7 +212,7 @@ def index():
             flash("Combinação inválida! Ex.: '1,2,30,45,59,60'", "error")
             return redirect(url_for("index"))
 
-        # Verifica tentativas do mesmo usuário a cada 2 horas
+        # Verifica tentativas do mesmo usuário no intervalo de 2 horas
         time_2_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
         attempts_count = Attempt.query.filter(
             Attempt.username == username,
@@ -240,12 +222,12 @@ def index():
             flash("Você atingiu o limite de 5 tentativas a cada 2 horas. Tente novamente mais tarde.", "error")
             return redirect(url_for("index"))
 
-        # Registrar a tentativa
+        # Registrar a nova tentativa
         new_attempt = Attempt(username=escape(username), attempt=escape(combination))
         db.session.add(new_attempt)
         db.session.commit()
 
-        # Compara a combinação com a do cofre
+        # Compara a combinação
         if combination == safe.combination:
             safe.winner = username
             db.session.commit()
@@ -254,7 +236,7 @@ def index():
         else:
             flash("Combinação incorreta. Tente novamente.", "error")
 
-    # Cálculo opcional de tempo restante para reset
+    # Cálculo opcional de tempo restante para o reset
     days = hours = minutes = 0
     if safe and safe.reset_time:
         delta = safe.reset_time.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
@@ -274,9 +256,7 @@ def index():
         recaptcha_site_key=app.config.get("RECAPTCHA_PUBLIC_KEY"),
     )
 
-# =============================================================================
-# Rota Winner
-# =============================================================================
+
 @app.route("/winner", methods=["GET"])
 def winner():
     """
@@ -287,9 +267,7 @@ def winner():
         abort(404, description="Nenhum vencedor encontrado.")
     return render_template("winner.html", username=safe.winner, safe=safe)
 
-# =============================================================================
-# Rota Reset
-# =============================================================================
+
 @app.route("/reset", methods=["POST"])
 def reset_safe():
     """
@@ -311,7 +289,6 @@ def reset_safe():
         new_donor = request.form.get("donor", "Um doador generoso")
 
         safe.reset(new_combination=new_combination, new_prize=new_prize, new_donor=new_donor)
-
         flash("Cofre resetado com sucesso!", "success")
         app.logger.info(f"Cofre resetado. Nova combinação: {new_combination}")
     except Exception as e:
@@ -321,9 +298,7 @@ def reset_safe():
 
     return redirect(url_for("index"))
 
-# =============================================================================
-# Rota Exportar Auditoria
-# =============================================================================
+# ========== ROTA EXPORTAR AUDITORIA ==========
 @app.route("/exportar_auditoria", methods=["GET"])
 @admin_required
 def exportar_auditoria():
@@ -359,9 +334,6 @@ def exportar_auditoria():
         download_name="tentativas.csv",
     )
 
-# =============================================================================
-# Tratamento de Erros
-# =============================================================================
 @app.errorhandler(HTTPException)
 def handle_exception(e):
     """
@@ -370,16 +342,13 @@ def handle_exception(e):
     flash(Markup(f"Ocorreu um erro: {e.name} - {e.description}"), "error")
     return redirect(url_for("index"))
 
-# =============================================================================
-# Execução da Aplicação
-# =============================================================================
+
 def run_app():
     """
     Inicializa a aplicação e chama setup_safe() apenas uma vez.
     Removeu-se db.create_all() para usar Flask-Migrate.
     """
     with app.app_context():
-        # Aqui removemos db.create_all(), pois estamos usando Flask-Migrate
         setup_safe()
     app.run(debug=True, host="0.0.0.0", port=5001)
 
