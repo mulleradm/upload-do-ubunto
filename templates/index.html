@@ -452,13 +452,11 @@
              HEADER SECTION
         ========================================= -->
         <header>
-            <!-- SLIDESHOW DE BANNERS -->
-            <div class="banner-slideshow">
-                <div class="slide" style="background-image: url('/static/imagens/banner.png');"></div>
-                <div class="slide" style="background-image: url('/static/imagens/banner2.png');"></div>
-                <div class="slide" style="background-image: url('/static/imagens/banner3.png');"></div>
-            </div>
-
+          <header>
+          
+            <img src="{{ url_for('serve_file', filename='banner.png') }}" alt="Banner" style="width: 100%; height: auto;">
+        
+           
             <h1>COFRE DA SORTE</h1>
         </header>
 
@@ -600,39 +598,35 @@
             <p>© 2024 Cofre da Sorte - Todos os direitos reservados</p>
         </footer>
 
-        <!-- =========================================
-             Scripts para Funcionalidades Adicionais
-        ========================================= -->
         <script>
-const slides = document.querySelectorAll('.slide');
-let currentSlide = 0;
+            const slides = document.querySelectorAll('.slide');
+            let currentSlide = 0;
 
-function showSlide(index) {
-    slides.forEach((slide, i) => {
-        if (i === index) {
-            slide.style.left = '0'; // Slide ativo no centro
-            slide.classList.add('active');
-        } else if (i < index) {
-            slide.style.left = '-100%'; // Slides anteriores saem à esquerda
-            slide.classList.remove('active');
-        } else {
-            slide.style.left = '100%'; // Slides seguintes saem à direita
-            slide.classList.remove('active');
-        }
-    });
-}
+            function showSlide(index) {
+              slides.forEach((slide, i) => {
+                if (i === index) {
+                  slide.classList.add('active');
+                  slide.style.left = '0';
+                } else if (i < index) {
+                  slide.classList.remove('active');
+                  slide.style.left = '-100%';
+                } else {
+                  slide.classList.remove('active');
+                  slide.style.left = '100%';
+                }
+              });
+            }
 
-function nextSlide() {
-    currentSlide = (currentSlide + 1) % slides.length; // Avança para o próximo slide
-    showSlide(currentSlide);
-}
+            function nextSlide() {
+              currentSlide = (currentSlide + 1) % slides.length;
+              showSlide(currentSlide);
+            }
 
-// Inicializa o primeiro slide
-showSlide(currentSlide);
+            // Inicia mostrando o 1º slide (index = 0)
+            showSlide(currentSlide);
 
-// Troca de slides a cada 10 segundos
-setInterval(nextSlide, 10000);
-
+            // Troca de slide a cada 10 segundos
+            setInterval(nextSlide, 10000);
         </script>
     </body>
 </html>
