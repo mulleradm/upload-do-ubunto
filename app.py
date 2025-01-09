@@ -4,32 +4,16 @@ import re
 import csv
 import io
 import logging
-
 from markupsafe import escape, Markup
 import requests
 from datetime import datetime, timedelta, timezone
-
-from flask import (
-    Flask,
-    render_template,
-    request,
-    redirect,
-    url_for,
-    flash,
-    send_file,
-    abort
-)
+from flask import Flask,render_template,request,redirect,url_for,flash,send_file,abort
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
-
-# Proteção contra força bruta / abusos
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-
-# Importa db, Attempt, Safe e generate_combination do db.py
 from db import db, Attempt, Safe, generate_combination
-
 from flask_wtf import FlaskForm
 from wtforms import StringField, HiddenField, SubmitField
 from wtforms.validators import InputRequired, Length
