@@ -34,7 +34,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
 )
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "chave-secreta-padrao")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
 # =============================================================================
 # Configuração do Google reCAPTCHA v3
 # =============================================================================
@@ -61,6 +63,7 @@ limiter = Limiter(
 # Variável global para rastrear se o cofre foi configurado
 # =============================================================================
 safe_initialized = False
+
 
 # =============================================================================
 # setup_safe() - Configura o cofre uma única vez
