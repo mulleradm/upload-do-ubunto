@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 
-    <!-- =========================================
-         HEAD SECTION
-    ========================================= -->
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Cofre da Sorte</title>
         
-        <!-- Script do reCAPTCHA v3 (NÃO Enterprise) -->
+        <!-- Link para o arquivo CSS -->
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+        <!-- Script do reCAPTCHA v3 -->
         <script src="https://www.google.com/recaptcha/api.js?render=6Lc2-q8qAAAAAF8c69VaSI1SRKIenNoCi-GCgTKv"></script>
      
         <style>
@@ -355,108 +355,15 @@
             }
         </style>
 
-        <!-- =======================
-             Scripts JavaScript
-        ======================= -->
-        <script>
-            let selectedNumbers = [];
-
-            function toggleNumber(button, number) {
-                const num = parseInt(number, 10);
-                if (selectedNumbers.includes(num)) {
-                    selectedNumbers = selectedNumbers.filter(n => n !== num);
-                    button.classList.remove('selected');
-                    button.setAttribute('aria-pressed', 'false');
-                } else if (selectedNumbers.length < 6) {
-                    selectedNumbers.push(num);
-                    button.classList.add('selected');
-                    button.setAttribute('aria-pressed', 'true');
-                }
-                updateDisplay();
-            }
-
-            function updateDisplay() {
-                const display = document.querySelectorAll('.digit-display span');
-                display.forEach((span, index) => {
-                    span.textContent = selectedNumbers[index] || '';
-                    if (selectedNumbers[index]) {
-                        span.classList.add('selected');
-                    } else {
-                        span.classList.remove('selected');
-                    }
-                });
-                const hiddenInput = document.querySelector("input[name='numbers']");
-                hiddenInput.value = selectedNumbers.join(',');
-            }
-
-            function updateClock(resetTime) {
-                const resetDate = new Date(resetTime);
-                const now = new Date();
-                const diff = resetDate - now;
-
-                if (diff <= 0) {
-                    document.getElementById("clock").innerText = "Resetando...";
-                    return;
-                }
-
-                const hours = Math.floor(diff / (1000 * 60 * 60));
-                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-                document.getElementById("clock").innerText = `${hours}h ${minutes}m ${seconds}s`;
-
-                if (diff > 0) {
-                    setTimeout(() => updateClock(resetTime), 1000);
-                }
-            }
-        </script>
-
-        <script>
-          /**
-           * Função chamada ao submeter o formulário.
-           * - Previne envio imediato do formulário
-           * - Gera token usando o reCAPTCHA v3
-           * - Cria um input hidden com o token
-           * - Submete o formulário com o token incluso
-           */
-          function onSubmit(event) {
-              event.preventDefault();  // Evita envio imediato do formulário
-
-              // reCAPTCHA v3 padrão
-              grecaptcha.ready(() => {
-                  grecaptcha.execute('6Lc2-q8qAAAAAF8c69VaSI1SRKIenNoCi-GCgTKv', { action: 'login' })
-                  .then((token) => {
-                      // Cria um campo hidden para armazenar o token
-                      const input = document.createElement('input');
-                      input.type = 'hidden';
-                      input.name = 'g-recaptcha-response';
-                      input.value = token;
-
-                      // Adiciona o campo de resposta ao formulário
-                      document.forms[0].appendChild(input);
-
-                      // Submete o formulário
-                      document.forms[0].submit();
-                  });
-              });
-          }
-      </script>
     </head>
 
-    <!-- =========================================
-         BODY SECTION
-    ========================================= -->
     <body onload="updateClock('{{ safe.reset_time.isoformat() }}')">
         
         <!-- =========================================
              HEADER SECTION
         ========================================= -->
         <header>
-          <header>
-          
-            <img src="{{ url_for('serve_file', filename='banner.png') }}" alt="Banner" style="width: 100%; height: auto;">
-        
-           
+            <img src="{{ url_for('static', filename='imagens/banner.png') }}" alt="Banner" style="width: 100%; height: auto;">
             <h1>COFRE DA SORTE</h1>
         </header>
 
@@ -598,6 +505,9 @@
             <p>© 2024 Cofre da Sorte - Todos os direitos reservados</p>
         </footer>
 
+        <!-- =========================================
+             Scripts para Funcionalidades Adicionais
+        ========================================= -->
         <script>
             const slides = document.querySelectorAll('.slide');
             let currentSlide = 0;
