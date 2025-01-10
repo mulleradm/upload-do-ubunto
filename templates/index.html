@@ -452,12 +452,10 @@
              HEADER SECTION
         ========================================= -->
         <header>
-            <!-- SLIDESHOW DE BANNERS -->
-            <div class="banner-slideshow">
-                <div class="slide" style="background-image: url('/static/imagens/banner.png');"></div>
-                <div class="slide" style="background-image: url('/static/imagens/banner2.png');"></div>
-                <div class="slide" style="background-image: url('/static/imagens/banner3.png');"></div>
-            </div>
+          
+            <!-- Carregando imagem diretamente do diretório static -->
+            <img src="{{ url_for('static', filename='imagens/banner.png') }}" alt="Banner">
+        
 
             <h1>COFRE DA SORTE</h1>
         </header>
