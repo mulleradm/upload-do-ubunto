@@ -75,27 +75,6 @@ def serve_file(filename):
     return send_from_directory(images_folder, filename)
 
 
-@app.after_request
-def add_security_headers(response):
-    """
-    Exemplos de cabeçalhos que ajudam a aumentar a segurança.
-    Ajuste conforme necessidade.
-    """
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    
-    # Atualização da Content-Security-Policy para permitir imagens do diretório correto
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "style-src 'self' 'unsafe-inline'; "  # Permite o carregamento de CSS do mesmo domínio e inline
-        "script-src 'self' 'unsafe-inline' https://www.google.com; "  # Permite o carregamento de scripts do mesmo domínio e do Google (reCAPTCHA)
-        "img-src 'self' data: /static/; "  # Permite imagens do mesmo domínio e imagens dentro do diretório /static/
-        "font-src 'self'; "  # Permite fontes do mesmo domínio
-        "frame-ancestors 'self'; "  # Restringe o carregamento em iframes apenas do mesmo domínio
-        "object-src 'none';"  # Impede o uso de objetos como Flash, etc.
-    )
-
-    return response
 
 
 # =============================================================================
