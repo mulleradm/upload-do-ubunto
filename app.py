@@ -1,4 +1,4 @@
-# app.py
+faça as modificaçoes no meu app.py deixando ele funcionando todas as funçoes, seja responsavel:# app.py
 import os
 import re
 import csv
@@ -7,7 +7,7 @@ import logging
 from markupsafe import escape, Markup
 import requests
 from datetime import datetime, timedelta, timezone
-from flask import Flask,render_template,request,redirect,url_for,flash,send_file,abort,send_from_directory, current_app
+from flask import Flask,render_template,request,redirect,url_for,flash,send_file,abort
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
@@ -34,9 +34,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
 )
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "chave-secreta-padrao")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+
 # =============================================================================
 # Configuração do Google reCAPTCHA v3
 # =============================================================================
@@ -63,20 +61,6 @@ limiter = Limiter(
 # Variável global para rastrear se o cofre foi configurado
 # =============================================================================
 safe_initialized = False
-
-
-IMAGE_FOLDER = os.path.join(app.root_path, 'static', 'imagens')
-
-# Rota para servir as imagens da pasta static/imagens/
-@app.route('/static/imagens/<filename>')
-def serve_file(filename):
-    # Caminho absoluto para a pasta onde as imagens estão armazenadas
-    images_folder = os.path.join(current_app.root_path, 'static', 'imagens')
-    return send_from_directory(images_folder, filename)
-
-
-
-
 
 # =============================================================================
 # setup_safe() - Configura o cofre uma única vez
