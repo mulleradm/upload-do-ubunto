@@ -1,4 +1,4 @@
-faça as modificaçoes no meu app.py deixando ele funcionando todas as funçoes, seja responsavel:# app.py
+# app.py
 import os
 import re
 import csv
