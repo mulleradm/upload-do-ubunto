@@ -88,7 +88,7 @@ def add_security_headers(response):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "  # Permite o carregamento de CSS do mesmo domínio e inline
-        "script-src 'self'; "  # Permite o carregamento de scripts do mesmo domínio
+        "script-src 'self' 'unsafe-inline' https://www.google.com; "  # Permite o carregamento de scripts do mesmo domínio e do Google (reCAPTCHA)
         "img-src 'self' data: /static/; "  # Permite imagens do mesmo domínio e imagens dentro do diretório /static/
         "font-src 'self'; "  # Permite fontes do mesmo domínio
         "frame-ancestors 'self'; "  # Restringe o carregamento em iframes apenas do mesmo domínio
