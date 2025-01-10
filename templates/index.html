@@ -1,204 +1,146 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 
-<!-- =========================================
-     HEAD SECTION
-========================================= -->
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cofre da Sorte</title>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Cofre da Sorte</title>
+        
+        <!-- Script do reCAPTCHA v3 -->
+        <script src="https://www.google.com/recaptcha/api.js?render=6Lc2-q8qAAAAAF8c69VaSI1SRKIenNoCi-GCgTKv"></script>
 
-    <!-- Script do reCAPTCHA v3 (NÃO Enterprise) -->
-    <script src="https://www.google.com/recaptcha/api.js?render=6Lc2-q8qAAAAAF8c69VaSI1SRKIenNoCi-GCgTKv"></script>
+        <!-- Link para o arquivo CSS -->
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    <!-- Link para o CSS -->
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
+    </head>
 
-<!-- =========================================
-     BODY SECTION
-========================================= -->
-<body onload="updateClock('{{ safe.reset_time.isoformat() }}')">
+    <body onload="updateClock('{{ safe.reset_time.isoformat() }}')">
+        
+        <header>
+            <!-- Banner de Imagem -->
+            <img src="{{ url_for('serve_file', filename='banner.png') }}" alt="Banner" style="width: 100%; height: auto;">
+            <h1>COFRE DA SORTE</h1>
+        </header>
 
-    <!-- =========================================
-         HEADER SECTION
-    ========================================= -->
-    <header>
-        <img src="{{ url_for('serve_file', filename='banner.png') }}" alt="Banner" style="width: 100%; height: auto;">
-        <h1>COFRE DA SORTE</h1>
-    </header>
+        <main>
+            <section class="prize-info">
+                <h2>Prêmio do Cofre</h2>
+                <p>
+                    Este cofre contém um prêmio exclusivo: <strong>{{ safe.prize }}</strong>.<br />
+                    Oferecido gentilmente por <strong>{{ safe.donor }}</strong>.
+                </p>
 
-    <!-- =========================================
-         MAIN CONTENT SECTION
-    ========================================= -->
-    <main>
-        <!-- =========================================
-             Seção de Informações do Prêmio
-        ========================================= -->
-        <section class="prize-info">
-            <h2>Prêmio do Cofre</h2>
-            <p>
-                Este cofre contém um prêmio exclusivo: <strong>{{ safe.prize }}</strong>.<br />
-                Oferecido gentilmente por <strong>{{ safe.donor }}</strong>.
-            </p>
+                <p>
+                    Para participar, é essencial que você esteja seguindo o perfil do patrocinador:
+                    <a href="https://www.instagram.com/patrocinador_oficial" target="_blank">@patrocinador_oficial</a>.
+                </p>
 
-            <!-- Link para o perfil do patrocinador no Instagram -->
-            <p>
-                Para participar, é essencial que você esteja seguindo o perfil do patrocinador:
-                <a href="https://www.instagram.com/patrocinador_oficial" target="_blank">
-                    @patrocinador_oficial
-                </a>.
-            </p>
+                <p>
+                    Além disso, você precisa curtir e comentar no
+                    <a href="https://www.instagram.com/p/POST_OFICIAL" target="_blank">Post Oficial</a> antes de abrir o cofre.
+                </p>
 
-            <!-- Link para o post oficial -->
-            <p>
-                Além disso, você precisa curtir e comentar no
-                <a href="https://www.instagram.com/p/POST_OFICIAL" target="_blank">
-                    Post Oficial
-                </a>
-                antes de abrir o cofre.
-            </p>
+                <div class="rules-box">
+                    <h3>Regras para Ganhar o Prêmio:</h3>
+                    <ul>
+                        <li>Você deve estar seguindo o <strong>@patrocinador_oficial</strong> no Instagram.</li>
+                        <li>É obrigatório ter curtido e comentado no Post Oficial antes de abrir o cofre.</li>
+                        <li>Verificaremos a data e hora em que você começou a seguir/curtir/comentar. Se não tiver seguido essas regras <em>antes</em> de abrir o cofre, você perde o direito ao prêmio.</li>
+                        <li>O prêmio só será entregue se <strong>todas</strong> as condições acima forem cumpridas.</li>
+                    </ul>
+                </div>
 
-            <!-- =========================================
-                 Regras para Ganhar o Prêmio
-            ========================================= -->
-            <div class="rules-box">
-                <h3>Regras para Ganhar o Prêmio:</h3>
+                <p class="highlight">
+                    <em>Caso o ganhador não tenha seguido, curtido e comentado <strong>antes</strong> de abrir o cofre, perderá o prêmio!</em>
+                </p>
+            </section>
+
+            <div class="banner-below">
+                Escolha 6 números únicos de 1 a 60
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flashes">
+                        {% for category, message in messages %}
+                            <div class="message-banner {{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="form-container" onsubmit="onSubmit(event)">
+                {{ form.hidden_tag() }}
+                
+                <label for="username">Seu @ do Instagram:</label>
+                <input type="text" id="username" name="username" required placeholder="@seuusuario" maxlength="100">
+                
+                <div class="digit-display">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <div class="numbers-grid">
+                    {% for i in range(1, 61) %}
+                        <button type="button" onclick="toggleNumber(this, '{{ i }}')" aria-pressed="false">{{ i }}</button>
+                    {% endfor %}
+                </div>
+
+                <input type="hidden" name="numbers" value="">
+
+                <button type="submit">Tentar Abrir o Cofre</button>
+            </form>
+
+            <div class="clock">
+                Tempo para o reset: <span id="clock"></span>
+            </div>
+
+            <div class="attempts-list">
+                <h2>Tentativas Recentes</h2>
                 <ul>
-                    <li>Você deve estar seguindo o <strong>@patrocinador_oficial</strong> no Instagram.</li>
-                    <li>É obrigatório ter curtido e comentado no Post Oficial antes de abrir o cofre.</li>
-                    <li>Verificaremos a data e hora em que você começou a seguir/curtir/comentar. Se não tiver seguido essas regras <em>antes</em> de abrir o cofre, você perde o direito ao prêmio.</li>
-                    <li>O prêmio só será entregue se <strong>todas</strong> as condições acima forem cumpridas.</li>
+                    {% for attempt in attempts %}
+                        <li>{{ attempt.timestamp.strftime('%d/%m/%Y %H:%M:%S') }} - {{ attempt.username }} tentou {{ attempt.attempt }}</li>
+                    {% endfor %}
                 </ul>
             </div>
+        </main>
 
-            <p class="highlight">
-                <em>
-                    Caso o ganhador não tenha seguido, curtido e comentado
-                    <strong>antes</strong> de abrir o cofre, perderá o prêmio!
-                </em>
-            </p>
-        </section>
+        <footer>
+            <p>© 2024 Cofre da Sorte - Todos os direitos reservados</p>
+        </footer>
 
-        <!-- =========================================
-             Banner de Instrução
-        ========================================= -->
-        <div class="banner-below">
-            Escolha 6 números únicos de 1 a 60
-        </div>
+        <script>
+            const slides = document.querySelectorAll('.slide');
+            let currentSlide = 0;
 
-        <!-- =========================================
-             Exibição de Mensagens Flash
-        ========================================= -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <div class="flashes">
-              {% for category, message in messages %}
-                <div class="message-banner {{ category }}">
-                  {{ message }}
-                </div>
-              {% endfor %}
-            </div>
-          {% endif %}
-        {% endwith %}
-
-        <!-- =========================================
-             Formulário para Tentar Abrir o Cofre
-        ========================================= -->
-        <form method="POST" class="form-container" onsubmit="onSubmit(event)">
-            {{ form.hidden_tag() }}
-            
-            <!-- Campo de Nome de Usuário -->
-            <label for="username">Seu @ do Instagram:</label>
-            <input type="text" id="username" name="username" required placeholder="@seuusuario" maxlength="100">
-            
-            <!-- Exibição dos Números Selecionados -->
-            <div class="digit-display">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-
-            <!-- Grade de Seleção de Números -->
-            <div class="numbers-grid">
-                {% for i in range(1, 61) %}
-                    <button type="button" onclick="toggleNumber(this, '{{ i }}')" aria-pressed="false">{{ i }}</button>
-                {% endfor %}
-            </div>
-
-            <!-- Campo Oculto para Armazenar os Números Selecionados -->
-            <input type="hidden" name="numbers" value="">
-
-            <!-- Botão de Envio do Formulário -->
-            <button type="submit">Tentar Abrir o Cofre</button>
-        </form>
-
-        <!-- =========================================
-             Relógio de Contagem Regressiva
-        ========================================= -->
-        <div class="clock">
-            Tempo para o reset: <span id="clock"></span>
-        </div>
-
-        <!-- =========================================
-             Lista de Tentativas Recentes
-        ========================================= -->
-        <div class="attempts-list">
-            <h2>Tentativas Recentes</h2>
-            <ul>
-                {% for attempt in attempts %}
-                    <li>
-                        {{ attempt.timestamp.strftime('%d/%m/%Y %H:%M:%S') }} - 
-                        {{ attempt.username }} tentou {{ attempt.attempt }}
-                    </li>
-                {% endfor %}
-            </ul>
-        </div>
-    </main>
-
-    <!-- =========================================
-         Rodapé
-    ========================================= -->
-    <footer>
-        <p>© 2024 Cofre da Sorte - Todos os direitos reservados</p>
-    </footer>
-
-    <!-- =========================================
-         Scripts para Funcionalidades Adicionais
-    ========================================= -->
-    <script>
-        const slides = document.querySelectorAll('.slide');
-        let currentSlide = 0;
-
-        function showSlide(index) {
-          slides.forEach((slide, i) => {
-            if (i === index) {
-              slide.classList.add('active');
-              slide.style.left = '0';
-            } else if (i < index) {
-              slide.classList.remove('active');
-              slide.style.left = '-100%';
-            } else {
-              slide.classList.remove('active');
-              slide.style.left = '100%';
+            function showSlide(index) {
+                slides.forEach((slide, i) => {
+                    if (i === index) {
+                        slide.classList.add('active');
+                        slide.style.left = '0';
+                    } else if (i < index) {
+                        slide.classList.remove('active');
+                        slide.style.left = '-100%';
+                    } else {
+                        slide.classList.remove('active');
+                        slide.style.left = '100%';
+                    }
+                });
             }
-          });
-        }
 
-        function nextSlide() {
-          currentSlide = (currentSlide + 1) % slides.length;
-          showSlide(currentSlide);
-        }
+            function nextSlide() {
+                currentSlide = (currentSlide + 1) % slides.length;
+                showSlide(currentSlide);
+            }
 
-        // Inicia mostrando o 1º slide (index = 0)
-        showSlide(currentSlide);
-
-        // Troca de slide a cada 10 segundos
-        setInterval(nextSlide, 10000);
-    </script>
-</body>
+            showSlide(currentSlide);
+            setInterval(nextSlide, 10000);
+        </script>
+    </body>
 </html>
